@@ -39,24 +39,31 @@
 (defun gptel-dialogue-ask-question ()
   "Ask a question to gptel and display the response in the dedicated dialogue buffer in another window."
   (interactive)
-  (let ((question (read-string "Ask gptel: ")))
+  (let ((question (read-string (format "[%s] Ask gptel: " (format-time-string "%H:%M:%S")))))
     (let ((buffer (get-buffer-create gptel-dialogue-buffer-name)))
       (with-current-buffer buffer
         (gptel-dialogue-mode)
         (read-only-mode 0)
         (goto-char (point-max))
         (when (> (point) (point-min))
-          (insert "\n"))
-        (insert (format "%s: %s\n" (gptel-prompt-prefix-string) question))
+          (insert "\n\n"))
+        (insert (format "[%s] %s: %s\n"
+                        (format-time-string "%H:%M:%S")
+                        (gptel-prompt-prefix-string)
+                        question))
         (gptel-request
          question
          :buffer buffer
+         :stream t
          :position (point)
          :callback (lambda (response info)
                      (with-current-buffer (plist-get info :buffer)
                        (goto-char (point-max))
                        (when response
-                         (insert (format "%s: %s\n" (gptel-response-prefix-string) response)))
+                         (insert (format "[%s] %s: %s\n"
+                                         (format-time-string "%H:%M:%S")
+                                         (gptel-response-prefix-string)
+                                         response)))
                        (when (and (eq response t) (plist-get info :error))
                          (insert (format "Error: %s\n" (plist-get info :error))))
                        (goto-char (point-max)))))
