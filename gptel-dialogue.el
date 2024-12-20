@@ -1,6 +1,6 @@
 ;;; gptel-dialogue.el --- Dedicated buffer for gptel dialogue -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2024  YOUR NAME
+;; Copyright (C) 2024  Kang Tu
 
 ;; Author: YOUR NAME
 ;; Keywords: convenience
@@ -34,7 +34,7 @@
   :group 'gptel
   (setq-local transient-mark-mode nil)
   (setq-local mode-name "gptel-dialogue")
-  (define-key gptel-dialogue-mode-map (kbd " ") #'gptel-dialogue-ask)
+  (define-key gptel-dialogue-mode-map (kbd "SPC") #'gptel-dialogue-ask)
   (run-mode-hooks 'gptel-dialogue-mode-hook))
 
 (defalias 'gptel-dialogue-read-string 'read-string)
@@ -71,14 +71,14 @@
                          (insert (format "%s" response)))
                        (when (and (eq response t) (plist-get info :error))
                          (insert (format "Error: %s\n" (plist-get info :error))))
-                       (goto-char (point-max)))))
-       (unless (eq (current-buffer) buffer)
-         (switch-to-buffer-other-window buffer))))))
+                       (goto-char (point-max))))))
+      (unless (eq (current-buffer) buffer)
+        (switch-to-buffer-other-window buffer)))))
 
 ;; TODO
 ;; [X] 1. use helm-read-string
 ;; [X] 2. support region read. if there is region, concat the prompt (if it is available) and region
-;; [ ] 3. space inside dialogue buffer trigger input
+;; [X] 3. space inside dialogue buffer trigger input
 
 (provide 'gptel-dialogue)
 ;;; gptel-dialogue.el ends here
