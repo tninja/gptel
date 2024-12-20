@@ -74,9 +74,9 @@
       (switch-to-buffer-other-window buffer)))))
 
 ;; TODO
-;; 1. use helm-read-string
-;; 2. support region read. if there is region, concat the prompt (if it is available) and region
-;; 3. space inside dialogue buffer trigger input
+;; [X] 1. use helm-read-string
+;; [X] 2. support region read. if there is region, concat the prompt (if it is available) and region
+;; [ ] 3. space inside dialogue buffer trigger input
 
 (provide 'gptel-dialogue)
 ;;; gptel-dialogue.el ends here
