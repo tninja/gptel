@@ -47,7 +47,7 @@
         (goto-char (point-max))
         (when (> (point) (point-min))
           (insert "\n\n"))
-        (insert (concat (format-time-string "%H:%M:%S") "\n"))
+        (insert (propertize (format-time-string "%H:%M:%S") 'face 'italic) "\n")
         (insert (format "Q: %s\n" question))
         (insert "A: \n")
         (gptel-request
