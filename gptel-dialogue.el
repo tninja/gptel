@@ -48,8 +48,8 @@
         (when (> (point) (point-min))
           (insert "\n\n"))
         (insert (propertize (format-time-string "%H:%M:%S") 'face 'italic) "\n")
-        (insert (propertize "Q: " 'face 'bold) (format "%s\n" question))
-        (insert (propertize "A: " 'face 'bold))
+        (insert (propertize "Q: " 'face '(:foreground "red" :weight bold)) (format "%s\n" question))
+        (insert (propertize "A: " 'face '(:foreground "green" :weight bold)))
         (gptel-request
          question
          :buffer buffer
