@@ -29,16 +29,12 @@
 (defvar gptel-dialogue-buffer-name "*gptel-dialogue*"
   "Name of the dedicated gptel dialogue buffer.")
 
-(defun gptel-dialogue-mode ()
+(define-derived-mode gptel-dialogue-mode special-mode "gptel-dialogue"
   "Major mode for gptel dialogue buffers."
-  (interactive)
-  (kill-all-local-variables)
-  (change-major-mode 'special-mode)
-  (setq-local mode-name "gptel-dialogue")
+  :group 'gptel
   (setq-local transient-mark-mode nil)
-  (gptel-mode)
-  (setq-local major-mode 'gptel-dialogue-mode)
-  (run-mode-hooks))
+  (setq-local mode-name "gptel-dialogue")
+  (run-mode-hooks 'gptel-dialogue-mode-hook))
 
 (define-derived-mode gptel-dialogue-mode special-mode "gptel-dialogue"
   "Major mode for gptel dialogue buffers."
