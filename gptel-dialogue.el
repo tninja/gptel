@@ -72,7 +72,8 @@
                        (when (and (eq response t) (plist-get info :error))
                          (insert (format "Error: %s\n" (plist-get info :error))))
                        (goto-char (point-max)))))
-      (switch-to-buffer-other-window buffer)))))
+       (unless (eq (current-buffer) buffer)
+         (switch-to-buffer-other-window buffer))))))
 
 ;; TODO
 ;; [X] 1. use helm-read-string
