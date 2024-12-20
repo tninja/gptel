@@ -36,12 +36,6 @@
   (setq-local mode-name "gptel-dialogue")
   (run-mode-hooks 'gptel-dialogue-mode-hook))
 
-(define-derived-mode gptel-dialogue-mode special-mode "gptel-dialogue"
-  "Major mode for gptel dialogue buffers."
-  :group 'gptel
-  (setq-local transient-mark-mode nil)
-  (gptel-mode))
-
 (defun gptel-dialogue ()
   "Switch to or create a dedicated buffer for gptel dialogue."
   (interactive)
