@@ -36,21 +36,33 @@
   (setq-local mode-name "gptel-dialogue")
   (run-mode-hooks 'gptel-dialogue-mode-hook))
 
-(defun gptel-dialogue ()
-  "Switch to or create a dedicated buffer for gptel dialogue."
+(defun gptel-ask-question ()
+  "Ask a question to gptel and display the response in the dedicated dialogue buffer."
   (interactive)
-  (let ((buffer (get-buffer-create gptel-dialogue-buffer-name)))
-    (with-current-buffer buffer
-      (unless gptel-dialogue-mode
-       (gptel-dialogue-mode)))
-    (switch-to-buffer buffer)))
+  (let ((question (read-string "Ask gptel: ")))
+    (let ((buffer (get-buffer-create gptel-dialogue-buffer-name)))
+      (with-current-buffer buffer
+        (unless gptel-dialogue-mode
+          (gptel-dialogue-mode))
+        (goto-char (point-max))
+        (when (> (point) (point-min))
+          (insert "\n"))
+        (insert (format "%s: %s\n" (gptel-prompt-prefix-string) question))
+        (setq-local gptel--last-question-pos (point))
+        (gptel-request
+         question
+         :buffer buffer
+         :position (point)
+         :callback (lambda (response info)
+                     (with-current-buffer (plist-get info :buffer)
+                       (goto-char (point-max))
+                       (when response
+                         (insert (format "%s: %s\n" (gptel-response-prefix-string) response)))
+                       (when (and (eq response t) (plist-get info :error))
+                         (insert (format "Error: %s\n" (plist-get info :error))))
+                       (goto-char (point-max))))))
+      (switch-to-buffer-other-window buffer))))
 
-(defun gptel-dialogue-send ()
-  "Send the current prompt to the LLM in the dedicated gptel dialogue buffer."
-  (interactive)
-  (unless (eq (current-buffer) (get-buffer gptel-dialogue-buffer-name))
-    (user-error "This command is only available in the gptel dialogue buffer"))
-  (call-interactively #'gptel-send))
 
 (provide 'gptel-dialogue)
 ;;; gptel-dialogue.el ends here
