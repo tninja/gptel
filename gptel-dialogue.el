@@ -42,8 +42,7 @@
   (let ((question (read-string "Ask gptel: ")))
     (let ((buffer (get-buffer-create gptel-dialogue-buffer-name)))
       (with-current-buffer buffer
-        (unless gptel-dialogue-mode
-          (gptel-dialogue-mode))
+        (gptel-dialogue-mode)
         (goto-char (point-max))
         (when (> (point) (point-min))
           (insert "\n"))
