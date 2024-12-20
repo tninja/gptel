@@ -39,7 +39,7 @@
 (defun gptel-dialogue-ask ()
   "Ask a question to gptel and display the response in the dedicated dialogue buffer in another window."
   (interactive)
-  (let ((question (read-string (format "[%s] Ask gptel: " (format-time-string "%H:%M:%S")))))
+  (let ((question (read-string "Ask gptel: ")))
     (let ((buffer (get-buffer-create gptel-dialogue-buffer-name)))
       (with-current-buffer buffer
         (gptel-dialogue-mode)
@@ -65,6 +65,10 @@
                        (goto-char (point-max)))))
       (switch-to-buffer-other-window buffer)))))
 
+;; TODO
+;; 1. use helm-read-string
+;; 2. support region read. if there is region, concat the prompt (if it is available) and region
+;; 3. space inside dialogue buffer trigger input
 
 (provide 'gptel-dialogue)
 ;;; gptel-dialogue.el ends here
