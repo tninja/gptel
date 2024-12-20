@@ -36,18 +36,19 @@
   (setq-local mode-name "gptel-dialogue")
   (run-mode-hooks 'gptel-dialogue-mode-hook))
 
-(defun gptel-ask-question ()
-  "Ask a question to gptel and display the response in the dedicated dialogue buffer."
+(defun gptel-ask-question-other-window ()
+  "Ask a question to gptel and display the response in the dedicated dialogue buffer in another window."
   (interactive)
   (let ((question (read-string "Ask gptel: ")))
     (let ((buffer (get-buffer-create gptel-dialogue-buffer-name)))
       (with-current-buffer buffer
-        (gptel-dialogue-mode)
+        (unless gptel-dialogue-mode
+          (gptel-dialogue-mode))
         (goto-char (point-max))
         (when (> (point) (point-min))
           (insert "\n"))
         (insert (format "%s: %s\n" (gptel-prompt-prefix-string) question))
-        (setq-local gptel--last-question-pos (point))
+        (setq-local buffer-read-only nil)
         (gptel-request
          question
          :buffer buffer
@@ -59,7 +60,7 @@
                          (insert (format "%s: %s\n" (gptel-response-prefix-string) response)))
                        (when (and (eq response t) (plist-get info :error))
                          (insert (format "Error: %s\n" (plist-get info :error))))
-                       (goto-char (point-max))))))
+                       (goto-char (point-max)))))
       (switch-to-buffer-other-window buffer))))
 
 
