@@ -34,6 +34,7 @@
   :group 'gptel
   (setq-local transient-mark-mode nil)
   (setq-local mode-name "gptel-dialogue")
+  (define-key gptel-dialogue-mode-map (kbd " ") #'gptel-dialogue-ask)
   (run-mode-hooks 'gptel-dialogue-mode-hook))
 
 (defalias 'gptel-dialogue-read-string 'read-string)
