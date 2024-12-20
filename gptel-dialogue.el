@@ -36,10 +36,12 @@
   (setq-local mode-name "gptel-dialogue")
   (run-mode-hooks 'gptel-dialogue-mode-hook))
 
+(defalias 'gptel-dialogue-read-string 'read-string)
+
 (defun gptel-dialogue-ask ()
   "Ask a question to gptel and display the response in the dedicated dialogue buffer in another window."
   (interactive)
-  (let ((question (read-string "Ask gptel: ")))
+  (let ((question (gptel-dialogue-read-string "Ask gptel: ")))
     (let ((buffer (get-buffer-create gptel-dialogue-buffer-name)))
       (with-current-buffer buffer
         (gptel-dialogue-mode)
