@@ -41,7 +41,8 @@
   (interactive)
   (let ((buffer (get-buffer-create gptel-dialogue-buffer-name)))
     (with-current-buffer buffer
-      (gptel-dialogue-mode))
+      (unless gptel-dialogue-mode
+       (gptel-dialogue-mode)))
     (switch-to-buffer buffer)))
 
 (defun gptel-dialogue-send ()
