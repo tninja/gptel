@@ -41,7 +41,13 @@
 (defun gptel-dialogue-ask ()
   "Ask a question to gptel and display the response in the dedicated dialogue buffer in another window."
   (interactive)
-  (let ((question (gptel-dialogue-read-string "Ask gptel: ")))
+  (let* ((question (gptel-dialogue-read-string "Ask gptel: "))
+         (region-active-p (use-region-p))
+         (region-text (when region-active-p
+                        (buffer-substring-no-properties (region-beginning) (region-end))))
+         (final-question (if region-active-p
+                             (format "%s: %s" question region-text)
+                           question)))
     (let ((buffer (get-buffer-create gptel-dialogue-buffer-name)))
       (with-current-buffer buffer
         (gptel-dialogue-mode)
@@ -50,10 +56,10 @@
         (when (> (point) (point-min))
           (insert "\n\n"))
         (insert (propertize (format-time-string "%H:%M:%S") 'face 'italic) "\n")
-        (insert (propertize "Q: " 'face '(:foreground "red" :weight bold)) (format "%s\n" question))
+        (insert (propertize "Q: " 'face '(:foreground "red" :weight bold)) (format "%s\n" final-question))
         (insert (propertize "A: " 'face '(:foreground "green" :weight bold)))
         (gptel-request
-         question
+         final-question
          :buffer buffer
          :stream t
          :position (point)
