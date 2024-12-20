@@ -39,6 +39,13 @@
 
 (defalias 'gptel-dialogue-read-string 'read-string)
 
+(defun gptel-dialogue-switch-to-buffer ()
+  "Switch to the gptel dialogue buffer's window if the current buffer is not the gptel dialogue buffer."
+  (interactive)
+  (let ((buffer (get-buffer gptel-dialogue-buffer-name)))
+    (when (and buffer (not (eq (current-buffer) buffer)))
+      (switch-to-buffer-other-window buffer))))
+
 (defun gptel-dialogue-ask ()
   "Ask a question to gptel and display the response in the dedicated dialogue buffer in another window."
   (interactive)
@@ -72,8 +79,7 @@
                        (when (and (eq response t) (plist-get info :error))
                          (insert (format "Error: %s\n" (plist-get info :error))))
                        (goto-char (point-max))))))
-      (unless (eq (current-buffer) buffer)
-        (switch-to-buffer-other-window buffer)))))
+      (gptel-dialogue-switch-to-buffer))))
 
 ;; TODO
 ;; [X] 1. use helm-read-string
