@@ -49,8 +49,12 @@ The buffer name is determined as follows:
 
 (defun gptel-assistant-switch-to-buffer ()
   "Switch to the gptel assistant buffer in another window.
-The buffer name is determined by `gptel-assistant--get-buffer-name'."
+The buffer name is determined by `gptel-assistant--get-buffer-name'.
+Create a new buffer if needed."
   (interactive)
+  (let ((buffer-name (gptel-assistant--get-buffer-name)))
+    (unless (get-buffer buffer-name)
+      (gptel buffer-name)))
   (switch-to-buffer-other-window (gptel-assistant--get-buffer-name)))
 
 (defun gptel-assistant-question ()
