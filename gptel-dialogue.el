@@ -40,13 +40,6 @@
 
 (defalias 'gptel-dialogue-read-string 'read-string)
 
-(defun gptel-dialogue-switch-to-buffer ()
-  "Switch to the gptel dialogue buffer's window if the current buffer is not the gptel dialogue buffer."
-  (interactive)
-  (let ((buffer (get-buffer gptel-dialogue-buffer-name)))
-    (when (and buffer (not (eq (current-buffer) buffer)))
-      (switch-to-buffer-other-window buffer))))
-
 (defun gptel-dialogue-discuss ()
   "Ask a question to gptel and display the response in the dedicated dialogue buffer in another window."
   (interactive)
@@ -59,30 +52,15 @@
                            question))
          (vc-root (vc-root-dir))
          (buffer-name (if vc-root
-                          (format "*gptel-%s*" (abbreviate-file-name vc-root))
-                        "*gptel*")))
+                          (format "*gptel:%s*" (abbreviate-file-name vc-root))
+                        "*gptel-dialogue*")))
     (gptel buffer-name nil final-question nil) ; 使用 gptel 函数创建/切换缓冲区
     (let ((buffer (get-buffer buffer-name)))
       (with-current-buffer buffer
         (goto-char (point-max))
-        (unless (or (bobp) (eq (char-before) ?\n))
-          (insert "\n"))
-        (insert (propertize (format-time-string "%H:%M:%S") 'face 'italic) "\n")
-        (insert (propertize "Q: " 'face '(:foreground "red" :weight bold)) (format "%s\n" final-question))
-        (insert (propertize "A: " 'face '(:foreground "green" :weight bold)))
-        (gptel-request
-         final-question
-         :buffer buffer
-         :stream t
-         :position (point)
-         :callback (lambda (response info)
-                     (with-current-buffer (plist-get info :buffer)
-                       (goto-char (point-max))
-                       (when response
-                         (insert (format "%s" response)))
-                       (when (and (eq response t) (plist-get info :error))
-                         (insert (format "Error: %s\n" (plist-get info :error))))
-                       (goto-char (point-max))))))
+        (insert final-question)
+        (gptel-send)
+        )
       (display-buffer buffer '((display-buffer-pop-up-window)
                                 (inhibit-same-window . t))))))
 
