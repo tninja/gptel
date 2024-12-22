@@ -30,31 +30,21 @@
 (defvar gptel-dialogue-buffer-name "*gptel-dialogue*"
   "Name of the dedicated gptel dialogue buffer.")
 
-(define-derived-mode gptel-dialogue-mode special-mode "gptel-dialogue"
-  "Major mode for gptel dialogue buffers."
-  :group 'gptel
-  (setq-local transient-mark-mode nil)
-  (setq-local mode-name "gptel-dialogue")
-  (define-key gptel-dialogue-mode-map (kbd "SPC") #'gptel-dialogue-discuss)
-  (run-mode-hooks 'gptel-dialogue-mode-hook))
-
 (defalias 'gptel-dialogue-read-string 'read-string)
 
 (defun gptel-dialogue--get-buffer-name ()
   "Generate a buffer name for gptel dialogue based on the current project or a default name.
-
 The buffer name is determined as follows:
 - If a version control root directory is found, the buffer name is generated based on the abbreviated file name of the root directory.
 - If no version control root directory is found, the default buffer name `*gptel-dialogue*' is used."
-  (let ((vc-root (vc-root-dir))
-        (buffer-name (if vc-root
-                         (format "*gptel:%s*" (abbreviate-file-name vc-root))
-                       gptel-dialogue-buffer-name)))
+  (let* ((vc-root (vc-root-dir))
+         (buffer-name (if vc-root
+                          (format "*gptel:%s*" (abbreviate-file-name vc-root))
+                        gptel-dialogue-buffer-name)))
     buffer-name))
 
 (defun gptel-dialogue-switch-to-buffer ()
   "Switch to the gptel dialogue buffer in another window.
-
 The buffer name is determined by `gptel-dialogue--get-buffer-name'."
   (interactive)
   (switch-to-buffer-other-window (gptel-dialogue--get-buffer-name)))
@@ -68,7 +58,7 @@ The buffer name is determined by `gptel-dialogue--get-buffer-name'."
                         (buffer-substring-no-properties (region-beginning) (region-end))))
          (final-question (if region-active-p
                              (format "%s: %s" question region-text) question))
-        (buffer-name (gptel-dialogue--get-buffer-name)))
+         (buffer-name (gptel-dialogue--get-buffer-name)))
    (gptel buffer-name nil final-question nil)
    (let ((buffer (get-buffer buffer-name)))
      (with-current-buffer buffer
@@ -78,6 +68,8 @@ The buffer name is determined by `gptel-dialogue--get-buffer-name'."
         )
       (display-buffer buffer '((display-buffer-pop-up-window)
                                 (inhibit-same-window . t))))))
+
+(evil-define-key 'normal gptel-mode-map (kbd "SPC") 'gptel-dialogue-discuss)
 
 (provide 'gptel-dialogue)
 ;;; gptel-dialogue.el ends here
