@@ -22,6 +22,7 @@
 ;;; Commentary:
 
 ;; This file provides a dedicated buffer for gptel assistant.
+;; It aim to provide an assistant to file or buffer edited inside emacs. You can discuss with the assitant, with context
 
 ;;; Code:
 
@@ -40,12 +41,12 @@ The buffer name is determined as follows:
 - If no version control root directory is found, the default buffer name `*gptel-assistant*' is used."
   (let* ((current-buffer-name (buffer-name))
          (vc-root (vc-root-dir))
-         (buffer-name (if (and current-buffer-name (string-match-p "^\\*gptel" current-buffer-name))
-                          current-buffer-name
-                        (if vc-root
-                           (format "*gptel:%s*" (abbreviate-file-name vc-root))
-                        gptel-assistant-buffer-name)))
-    buffer-name)))
+         (gptel-buffer-name (if (and current-buffer-name (string-match-p "^\\*gptel" current-buffer-name))
+                                current-buffer-name
+                              (if vc-root
+                                  (format "*gptel:%s*" (abbreviate-file-name vc-root))
+                                gptel-assistant-buffer-name))))
+    gptel-buffer-name))
 
 (defun gptel-assistant-switch-to-buffer ()
   "Switch to the gptel assistant buffer in another window.
@@ -56,7 +57,7 @@ Create a new buffer if needed."
     (unless (get-buffer buffer-name)
       (gptel buffer-name)))
   (switch-to-buffer-other-window (gptel-assistant--get-buffer-name)))
-
+s
 (defun gptel-assistant-question ()
   "Ask a question to gptel and display the response in the dedicated assistant buffer in another window."
   (interactive)
@@ -76,7 +77,7 @@ Create a new buffer if needed."
         )
       (display-buffer buffer '((display-buffer-pop-up-window)
                                 (inhibit-same-window . t))))))
-
+s
 (evil-define-key 'normal gptel-mode-map (kbd "SPC") 'gptel-assistant-question)
 
 (provide 'gptel-assistant)
