@@ -56,14 +56,17 @@
                         (buffer-substring-no-properties (region-beginning) (region-end))))
          (final-question (if region-active-p
                              (format "%s: %s" question region-text)
-                           question)))
-    (let ((buffer (get-buffer-create gptel-dialogue-buffer-name)))
+                           question))
+         (vc-root (vc-root-dir))
+         (buffer-name (if vc-root
+                          (format "*gptel-%s*" (abbreviate-file-name vc-root))
+                        "*gptel*")))
+    (gptel buffer-name nil final-question nil) ; 使用 gptel 函数创建/切换缓冲区
+    (let ((buffer (get-buffer buffer-name)))
       (with-current-buffer buffer
-        (gptel-dialogue-mode)
-        (read-only-mode 0)
         (goto-char (point-max))
-        (when (> (point) (point-min))
-          (insert "\n\n"))
+        (unless (or (bobp) (eq (char-before) ?\n))
+          (insert "\n"))
         (insert (propertize (format-time-string "%H:%M:%S") 'face 'italic) "\n")
         (insert (propertize "Q: " 'face '(:foreground "red" :weight bold)) (format "%s\n" final-question))
         (insert (propertize "A: " 'face '(:foreground "green" :weight bold)))
@@ -80,7 +83,8 @@
                        (when (and (eq response t) (plist-get info :error))
                          (insert (format "Error: %s\n" (plist-get info :error))))
                        (goto-char (point-max))))))
-      (gptel-dialogue-switch-to-buffer))))
+      (display-buffer buffer '((display-buffer-pop-up-window)
+                                (inhibit-same-window . t))))))
 
 (provide 'gptel-dialogue)
 ;;; gptel-dialogue.el ends here
