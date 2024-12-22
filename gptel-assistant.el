@@ -22,6 +22,9 @@
 ;;; Commentary:
 
 ;; This file provides a dedicated buffer for gptel assistant.
+;;; Requirements:
+;; - gptel
+;; - helm
 ;; It aim to provide an assistant to file or buffer edited inside emacs. You can discuss with the assitant, with context
 
 ;;; Code:
