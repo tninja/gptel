@@ -27,11 +27,11 @@
 ;;; Code:
 
 (require 'gptel)
+(require 'helm)
+(require 'cl-lib)  ; For `cl-subseq`
 
 (defvar gptel-assistant-buffer-name "*gptel-assistant*"
   "Name of the dedicated gptel assistant buffer.")
-
-(defalias 'gptel-assistant-read-string 'read-string)
 
 (defun gptel-assistant--get-buffer-name ()
   "Generate a buffer name for gptel assistant based on the current project or a default name.
@@ -57,11 +57,11 @@ Create a new buffer if needed."
     (unless (get-buffer buffer-name)
       (gptel buffer-name)))
   (switch-to-buffer-other-window (gptel-assistant--get-buffer-name)))
-s
+
 (defun gptel-assistant-question ()
   "Ask a question to gptel and display the response in the dedicated assistant buffer in another window."
   (interactive)
-  (let* ((question (gptel-assistant-read-string "Ask gptel: "))
+  (let* ((question (gptel-helm-read-string "Ask gptel: "))
          (region-active-p (use-region-p))
          (region-text (when region-active-p
                         (buffer-substring-no-properties (region-beginning) (region-end))))
@@ -77,7 +77,40 @@ s
         )
       (display-buffer buffer '((display-buffer-pop-up-window)
                                 (inhibit-same-window . t))))))
-s
+
+(defun gptel-helm-read-string (prompt)
+  "Read a string with Helm completion for gptel, showing historical inputs."
+  (helm-read-string-with-history prompt "gptel-helm-read-string-history.el"))
+
+(defun helm-read-string-with-history (prompt history-file-name &optional initial-input)
+  "Read a string with Helm completion using specified history file.
+PROMPT is the prompt string.
+HISTORY-FILE-NAME is the base name for history file.
+INITIAL-INPUT is optional initial input string."
+  ;; Load history from file
+  (let* ((history-file (expand-file-name history-file-name user-emacs-directory))
+         (history (when (file-exists-p history-file)
+                    (with-temp-buffer
+                      (insert-file-contents history-file)
+                      (delete-dups (read (buffer-string))))))
+         ;; Read input with helm
+         (input (helm-comp-read
+                 prompt
+                 history
+                 :must-match nil
+                 :name "Helm Read String"
+                 :fuzzy t
+                 :initial-input initial-input)))
+    ;; Add to history if non-empty and save
+    (unless (string-empty-p input)
+      (push input history)
+      (with-temp-file history-file
+        (let ((history-entries (cl-subseq history
+                                          0 (min (length history)
+                                                 10000))))  ; Keep last 10000 entries
+          (insert (prin1-to-string history-entries)))))
+    input))
+
 (evil-define-key 'normal gptel-mode-map (kbd "SPC") 'gptel-assistant-question)
 
 (provide 'gptel-assistant)
