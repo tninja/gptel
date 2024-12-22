@@ -35,11 +35,15 @@
 (defun gptel-dialogue--get-buffer-name ()
   "Generate a buffer name for gptel dialogue based on the current project or a default name.
 The buffer name is determined as follows:
+- If the current buffer is a gptel buffer, its name is returned.
 - If a version control root directory is found, the buffer name is generated based on the abbreviated file name of the root directory.
 - If no version control root directory is found, the default buffer name `*gptel-dialogue*' is used."
-  (let* ((vc-root (vc-root-dir))
-         (buffer-name (if vc-root
-                          (format "*gptel:%s*" (abbreviate-file-name vc-root))
+  (let* ((current-buffer-name (buffer-name))
+         (vc-root (vc-root-dir))
+         (buffer-name (if (and current-buffer-name (string-match-p "^\\*gptel" current-buffer-name))
+                          current-buffer-name
+                        (if vc-root
+                           (format "*gptel:%s*" (abbreviate-file-name vc-root))
                         gptel-dialogue-buffer-name)))
     buffer-name))
 
