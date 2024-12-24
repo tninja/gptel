@@ -5,6 +5,7 @@
 
 ;; Author: Kang Tu
 ;; Keywords: convenience
+;; Package-Requires: ((gptel "0.9.7") (helm "3.0") (transient "0.4.0"))
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -22,9 +23,6 @@
 ;;; Commentary:
 
 ;; This file provides a dedicated buffer for gptel assistant.
-;;; Requirements:
-;; - gptel
-;; - helm
 ;; It aim to provide an assistant to file or buffer edited inside emacs. You can discuss with the assitant, with context
 
 ;;; Code:
