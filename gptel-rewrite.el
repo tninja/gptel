@@ -585,6 +585,7 @@ generated from functions."
       (setcar prompt (concat (car-safe (gptel--parse-directive
                                         gptel--rewrite-directive 'raw))
                              "\n\n" (car prompt))))
+    (mapc (lambda (item) (message (format "item: %s" item))) prompt) ;; for debugging
     (gptel-request prompt
       :dry-run dry-run
       :system gptel--rewrite-directive

@@ -432,6 +432,7 @@ gptel's idea of the directive is more general.  A directive in
   `gptel--rewrite-directive-default' for an example."
   :safe #'always
   :type '(alist :key-type symbol :value-type string))
+)
 
 (defcustom gptel-max-tokens nil
   "Max tokens per response.
