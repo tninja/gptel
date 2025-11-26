@@ -1788,7 +1788,16 @@ MACHINE is an instance of `gptel-fsm'"
 
 (defun gptel--tool-result-p (info) (plist-get info :tool-success))
 
-
+;;; Synchronous request support
+
+(defcustom gptel-request-timeout 30
+  "Default timeout in seconds for synchronous gptel requests.
+
+This is the maximum time `gptel-request' with :sync t will wait
+for a response from the LLM before timing out."
+  :type 'natnum
+  :group 'gptel)
+
 ;;; Send gptel requests
 (cl-defun gptel-request
     (&optional prompt &key callback
@@ -1796,10 +1805,11 @@ MACHINE is an instance of `gptel-fsm'"
                position context dry-run
                (stream nil) (in-place nil)
                (system gptel--system-message)
-               schema transforms (fsm (gptel-make-fsm)))
+               schema transforms (fsm (gptel-make-fsm))
+               sync (timeout gptel-request-timeout))
   "Request a response from the `gptel-backend' for PROMPT.
 
-The request is asynchronous, this function returns immediately.
+The request is asynchronous by default, this function returns immediately.
 
 If PROMPT is
 - a string, it is used to create a full prompt suitable for
@@ -1963,6 +1973,19 @@ to define a custom request control flow, see `gptel-fsm' for
 details.  You can safely ignore this -- FSM is an unstable
 feature and subject to change.
 
+SYNC, if non-nil, makes the request synchronous (blocking).  The
+function will block until the response is received or TIMEOUT
+seconds have elapsed.  When SYNC is non-nil:
+- The function returns the response string directly instead of
+  the state machine object.
+- Returns nil if there was an error or timeout.
+- Streaming is disabled (STREAM is ignored).
+- Tool use is disabled since tool calls require user interaction.
+- CALLBACK is ignored; a predefined callback captures the response.
+
+TIMEOUT specifies how many seconds to wait for a response when
+SYNC is non-nil.  It defaults to `gptel-request-timeout' (30 seconds).
+
 Note:
 
 1. This function is not fully self-contained.  Consider
@@ -1971,11 +1994,39 @@ let-binding the parameters `gptel-backend', `gptel-model',
 required.
 
 2. The return value of this function is a state machine that may
-be used to rerun or continue the request at a later time."
+be used to rerun or continue the request at a later time.  When
+SYNC is non-nil, the response string is returned instead."
   (declare (indent 1))
   ;; TODO Remove this check in version 1.0
   (gptel--sanitize-model)
-  (let* ((start-marker
+  ;; Sync mode variables - these capture response/error when :sync t
+  (let* ((sync-response nil)
+         (sync-error nil)
+         (sync-start-time (when sync (float-time)))
+         ;; For sync mode, override callback to capture response
+         (callback (if sync
+                       (lambda (resp info)
+                         (cond
+                          ;; Capture string response
+                          ((stringp resp)
+                           (setq sync-response resp))
+                          ;; Handle abort signal
+                          ((eq resp 'abort)
+                           (setq sync-error "Request aborted."))
+                          ;; Handle errors
+                          ((and (null resp) (plist-get info :error))
+                           (let ((err (plist-get info :error)))
+                             (setq sync-error
+                                   (cond
+                                    ((stringp err) err)
+                                    ((plist-get err :message)
+                                     (plist-get err :message))
+                                    (t (or (plist-get info :status)
+                                           "Unknown error"))))))))
+                     callback))
+         ;; For sync mode, disable streaming
+         (stream (if sync nil stream))
+         (start-marker
           (cond
            ((null position)
             (if (use-region-p)
@@ -2003,7 +2054,12 @@ be used to rerun or continue the request at a later time."
                      :buffer buffer
                      :position start-marker)))
     (when transforms (plist-put info :transforms transforms))
-    (with-current-buffer prompt-buffer (setq gptel--system-message system))
+    (with-current-buffer prompt-buffer
+      (setq gptel--system-message system)
+      ;; For sync mode, disable tool use (requires user interaction)
+      (when sync
+        (setq-local gptel-use-tools nil)
+        (setq-local gptel-tools nil)))
     (when stream (plist-put info :stream stream))
     ;; This context should not be confused with the context aggregation context!
     (when callback (plist-put info :callback callback))
@@ -2011,54 +2067,70 @@ be used to rerun or continue the request at a later time."
     (when in-place (plist-put info :in-place in-place))
     ;; Add info to state machine context
     (when dry-run (plist-put info :dry-run dry-run))
-    (setf (gptel-fsm-info fsm) info))
+    (setf (gptel-fsm-info fsm) info)
 
-  ;; TEMP: Augment in separate let block for now.  Are we overcapturing?
-  ;; FIXME(augment): Call augmentors with INFO, not FSM
-  (let ((info (gptel-fsm-info fsm)))
-    (with-current-buffer (plist-get info :data)
-      (setq-local gptel-prompt-transform-functions (plist-get info :transforms))
-      ;; Preset has highest priority because it can change prompt-transform-functions
-      (when (memq 'gptel--transform-apply-preset gptel-prompt-transform-functions)
-        (gptel--transform-apply-preset fsm)
-        (setq gptel-prompt-transform-functions ;avoid mutation, copy transforms
-              (remq 'gptel--transform-apply-preset gptel-prompt-transform-functions)))
-      (let ((augment-total              ;act like a hook, count total
-             (if (memq t gptel-prompt-transform-functions)
-                 (length
-                  (setq gptel-prompt-transform-functions
-                        (nconc (remq t gptel-prompt-transform-functions)
-                               (default-value 'gptel-prompt-transform-functions))))
-               (length gptel-prompt-transform-functions)))
-            (augment-idx 0))
-        (if (null gptel-prompt-transform-functions)
-            (gptel--realize-query fsm)
-          ;; FIXME(request-lib): Cannot use gptel--update-status from this file
-          ;; (with-current-buffer (plist-get info :buffer) ;Apply prompt transformations
-          ;;   (gptel--update-status " Augmenting..." 'mode-line-emphasis))
+    ;; TEMP: Augment in separate let block for now.  Are we overcapturing?
+    ;; FIXME(augment): Call augmentors with INFO, not FSM
+    (let ((info (gptel-fsm-info fsm)))
+      (with-current-buffer (plist-get info :data)
+        (setq-local gptel-prompt-transform-functions (plist-get info :transforms))
+        ;; Preset has highest priority because it can change prompt-transform-functions
+        (when (memq 'gptel--transform-apply-preset gptel-prompt-transform-functions)
+          (gptel--transform-apply-preset fsm)
+          (setq gptel-prompt-transform-functions ;avoid mutation, copy transforms
+                (remq 'gptel--transform-apply-preset gptel-prompt-transform-functions)))
+        (let ((augment-total              ;act like a hook, count total
+               (if (memq t gptel-prompt-transform-functions)
+                   (length
+                    (setq gptel-prompt-transform-functions
+                          (nconc (remq t gptel-prompt-transform-functions)
+                                 (default-value 'gptel-prompt-transform-functions))))
+                 (length gptel-prompt-transform-functions)))
+              (augment-idx 0))
+          (if (null gptel-prompt-transform-functions)
+              (gptel--realize-query fsm)
+            ;; FIXME(request-lib): Cannot use gptel--update-status from this file
+            ;; (with-current-buffer (plist-get info :buffer) ;Apply prompt transformations
+            ;;   (gptel--update-status " Augmenting..." 'mode-line-emphasis))
 
-          ;; FIXME(augment): This needs to be converted into a linear callback
-          ;; chain to avoid race conditions with multiple async augmentors.
-          (run-hook-wrapped
-           'gptel-prompt-transform-functions
-           (lambda (func fsm-arg)
-             (with-current-buffer (plist-get info :data)
-               (goto-char (point-max))
-               (if (= (car (func-arity func)) 2) ;async augmentor
-                   (funcall func (lambda ()
-                                   (cl-incf augment-idx)
-                                   (when (>= augment-idx augment-total) ;All augmentors have run
-                                     (gptel--realize-query fsm-arg)))
-                            fsm-arg)
-                 (if (= (car (func-arity func)) 0)
-                     (funcall func)
-                   (funcall func fsm-arg)) ;sync augmentor
-                 (cl-incf augment-idx)
-                 (when (>= augment-idx augment-total) ;All augmentors have run
-                   (gptel--realize-query fsm-arg))))
-             nil)           ;always return nil so run-hook-wrapped doesn't abort
-           fsm)))))
-  fsm)
+            ;; FIXME(augment): This needs to be converted into a linear callback
+            ;; chain to avoid race conditions with multiple async augmentors.
+            (run-hook-wrapped
+             'gptel-prompt-transform-functions
+             (lambda (func fsm-arg)
+               (with-current-buffer (plist-get info :data)
+                 (goto-char (point-max))
+                 (if (= (car (func-arity func)) 2) ;async augmentor
+                     (funcall func (lambda ()
+                                     (cl-incf augment-idx)
+                                     (when (>= augment-idx augment-total) ;All augmentors have run
+                                       (gptel--realize-query fsm-arg)))
+                              fsm-arg)
+                   (if (= (car (func-arity func)) 0)
+                       (funcall func)
+                     (funcall func fsm-arg)) ;sync augmentor
+                   (cl-incf augment-idx)
+                   (when (>= augment-idx augment-total) ;All augmentors have run
+                     (gptel--realize-query fsm-arg))))
+               nil)           ;always return nil so run-hook-wrapped doesn't abort
+             fsm)))))
+
+    ;; Handle sync mode: block until FSM reaches terminal state
+    (if sync
+        (progn
+          ;; Block until FSM reaches terminal state (DONE, ERRS, ABRT) or timeout
+          (while (not (memq (gptel-fsm-state fsm) '(DONE ERRS ABRT)))
+            ;; Check timeout first for precise timing
+            (when (> (- (float-time) sync-start-time) timeout)
+              (gptel-abort (plist-get (gptel-fsm-info fsm) :buffer))
+              (setq sync-error (format "Request timed out after %s seconds" timeout))
+              (cl-return-from gptel-request nil))
+            ;; Process pending I/O with reasonable wait time
+            (accept-process-output nil 0.1))
+          (when sync-error
+            (message "gptel-request: %s" sync-error))
+          sync-response)
+      fsm)))
 
 (defun gptel--realize-query (fsm)
   "Realize the query payload for FSM from its prompt buffer.
@@ -2889,135 +2961,6 @@ PROC-INFO is a plist with contextual information."
                     "Could not parse HTTP response.")))
         (list nil http-status (concat "(" http-msg ") Could not parse HTTP response.")
               "Could not parse HTTP response.")))))
-
-
-;;; Synchronous request API
-
-(defcustom gptel-request-timeout 30
-  "Default timeout in seconds for synchronous gptel requests.
-
-This is the maximum time `gptel-request-sync' will wait for a
-response from the LLM before timing out."
-  :type 'natnum
-  :group 'gptel)
-
-;;;###autoload
-(cl-defun gptel-request-sync
-    (prompt &key
-            (buffer (current-buffer))
-            context
-            (system gptel--system-message)
-            (timeout gptel-request-timeout))
-  "Request a response from the `gptel-backend' for PROMPT synchronously.
-
-This function blocks until a response is received or TIMEOUT seconds
-have elapsed.  It is a simpler, synchronous alternative to `gptel-request'
-for use cases where blocking behavior is acceptable.
-
-Returns the response string if successful, or nil if an error occurred
-or the request timed out.
-
-PROMPT must be a string containing the text to send to the LLM.
-
-Keyword arguments:
-
-BUFFER is used as the context buffer for the request.  It defaults to
-the current buffer.
-
-CONTEXT is any additional data needed for processing.
-
-SYSTEM is the system message or directive sent to the LLM.
-See `gptel-directives' for more information.  If omitted, the value
-of `gptel--system-message' for BUFFER is used.
-
-TIMEOUT is the maximum time in seconds to wait for a response.
-It defaults to the value of `gptel-request-timeout'.
-
-Note:
-
-1. This function disables streaming since it waits for the complete
-   response.
-
-2. This function does not support multi-turn conversations or tool
-   calls.  For more advanced use cases, use `gptel-request' with
-   a callback instead.
-
-3. Consider let-binding `gptel-backend' and `gptel-model' around
-   calls to this function to specify the LLM to use.
-
-Example usage:
-
-  (gptel-request-sync \"What is the capital of France?\")
-
-  (let ((gptel-backend my-backend)
-        (gptel-model \\='gpt-4o-mini))
-    (gptel-request-sync \"Explain Emacs in one sentence.\"
-      :timeout 60))"
-  (unless (stringp prompt)
-    (user-error "`gptel-request-sync' requires a string PROMPT"))
-  (let ((response nil)
-        (error-info nil)
-        (start-time (float-time))
-        (request-buffer buffer)
-        (temp-buffer (generate-new-buffer " *gptel-sync*"))
-        (fsm nil))
-    (unwind-protect
-        (progn
-          ;; Copy buffer-local gptel settings to temp buffer
-          ;; Uses the same variables as `gptel--with-buffer-copy-internal'
-          (with-current-buffer temp-buffer
-            (dolist (sym '(gptel-backend gptel--system-message gptel-model
-                           gptel-mode gptel-track-response gptel-track-media
-                           gptel-use-tools gptel-tools gptel-use-curl gptel--schema
-                           gptel-use-context gptel-context gptel--num-messages-to-send
-                           gptel-stream gptel-include-reasoning gptel--request-params
-                           gptel-temperature gptel-max-tokens gptel-cache))
-              (set (make-local-variable sym)
-                   (buffer-local-value sym request-buffer)))
-            ;; Disable tool use for sync calls - tool calls require user interaction
-            (setq-local gptel-use-tools nil)
-            (setq-local gptel-tools nil))
-          (setq fsm
-                (gptel-request prompt
-                  :buffer temp-buffer
-                  :stream nil
-                  :context context
-                  :system system
-                  :callback (lambda (resp info)
-                              (cond
-                               ;; Only capture the final string response
-                               ((stringp resp)
-                                (setq response resp))
-                               ;; Handle abort signal
-                               ((eq resp 'abort)
-                                (setq error-info "Request aborted."))
-                               ;; Handle errors (null response with error info)
-                               ((and (null resp) (plist-get info :error))
-                                (let ((err (plist-get info :error)))
-                                  (setq error-info
-                                        (cond
-                                         ((stringp err) err)
-                                         ((plist-get err :message)
-                                          (plist-get err :message))
-                                         (t (or (plist-get info :status)
-                                                "Unknown error"))))))))))
-          ;; Block until FSM reaches terminal state (DONE or ERRS) or timeout
-          (while (not (memq (gptel-fsm-state fsm) '(DONE ERRS ABRT)))
-            (when (> (- (float-time) start-time) timeout)
-              (gptel-abort temp-buffer)
-              (setq error-info (format "Request timed out after %s seconds" timeout))
-              ;; Force exit from loop after abort - cl-defun creates implicit cl-block
-              (cl-return-from gptel-request-sync nil))
-            ;; Process pending I/O and timers
-            (accept-process-output nil 0.1)
-            ;; Also process any pending input events
-            (sit-for 0.01 t)))
-      ;; Clean up temp buffer
-      (when (buffer-live-p temp-buffer)
-        (kill-buffer temp-buffer)))
-    (when error-info
-      (message "gptel-request-sync: %s" error-info))
-    response))
 
 (provide 'gptel-request)
 ;;; gptel-request.el ends here
