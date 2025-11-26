@@ -1788,15 +1788,6 @@ MACHINE is an instance of `gptel-fsm'"
 
 (defun gptel--tool-result-p (info) (plist-get info :tool-success))
 
-;;; Synchronous request support
-
-(defcustom gptel-request-timeout 30
-  "Default timeout in seconds for synchronous gptel requests.
-
-This is the maximum time `gptel-request' with :sync t will wait
-for a response from the LLM before timing out."
-  :type 'natnum
-  :group 'gptel)
 
 ;;; Send gptel requests
 (cl-defun gptel-request
@@ -1806,7 +1797,7 @@ for a response from the LLM before timing out."
                (stream nil) (in-place nil)
                (system gptel--system-message)
                schema transforms (fsm (gptel-make-fsm))
-               sync (timeout gptel-request-timeout))
+               sync)
   "Request a response from the `gptel-backend' for PROMPT.
 
 The request is asynchronous by default, this function returns immediately.
@@ -1974,17 +1965,14 @@ details.  You can safely ignore this -- FSM is an unstable
 feature and subject to change.
 
 SYNC, if non-nil, makes the request synchronous (blocking).  The
-function will block until the response is received or TIMEOUT
-seconds have elapsed.  When SYNC is non-nil:
+function will block until the response is received or 30 seconds
+have elapsed.  When SYNC is non-nil:
 - The function returns the response string directly instead of
   the state machine object.
 - Returns nil if there was an error or timeout.
 - Streaming is disabled (STREAM is ignored).
 - Tool use is disabled since tool calls require user interaction.
 - CALLBACK is ignored; a predefined callback captures the response.
-
-TIMEOUT specifies how many seconds to wait for a response when
-SYNC is non-nil.  It defaults to `gptel-request-timeout' (30 seconds).
 
 Note:
 
@@ -2120,10 +2108,10 @@ SYNC is non-nil, the response string is returned instead."
         (progn
           ;; Block until FSM reaches terminal state (DONE, ERRS, ABRT) or timeout
           (while (not (memq (gptel-fsm-state fsm) '(DONE ERRS ABRT)))
-            ;; Check timeout first for precise timing
-            (when (> (- (float-time) sync-start-time) timeout)
+            ;; Check timeout first for precise timing (30 second timeout)
+            (when (> (- (float-time) sync-start-time) 30)
               (gptel-abort (plist-get (gptel-fsm-info fsm) :buffer))
-              (setq sync-error (format "Request timed out after %s seconds" timeout))
+              (setq sync-error "Request timed out after 30 seconds")
               (cl-return-from gptel-request nil))
             ;; Process pending I/O with reasonable wait time
             (accept-process-output nil 0.1))
