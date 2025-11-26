@@ -2145,7 +2145,7 @@ BUF defaults to the current buffer."
 
 This is the maximum time `gptel-request-sync' will wait for a
 response before signaling an error."
-  :type 'natnum
+  :type 'number
   :group 'gptel)
 
 ;;;###autoload
@@ -2219,8 +2219,8 @@ Example with custom system message:
             (when (> (- (float-time) start-time) timeout)
               (gptel-abort temp-buffer)
               (setq done t
-                    error-info (format "Request timed out after %d seconds" timeout)))
-            (accept-process-output nil 0.1)))
+                    error-info (format "Request timed out after %s seconds" timeout)))
+            (accept-process-output nil 0.05)))
       ;; Clean up temp buffer
       (when (buffer-live-p temp-buffer)
         (kill-buffer temp-buffer)))
