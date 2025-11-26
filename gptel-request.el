@@ -2140,6 +2140,95 @@ BUF defaults to the current buffer."
     (gptel--fsm-transition fsm 'ABRT)
     (message "Stopped gptel request in buffer %S" (buffer-name buf))))
 
+(defcustom gptel-request-timeout 30
+  "Timeout in seconds for synchronous gptel requests.
+
+This is the maximum time `gptel-request-sync' will wait for a
+response before signaling an error."
+  :type 'natnum
+  :group 'gptel)
+
+;;;###autoload
+(cl-defun gptel-request-sync
+    (prompt &key
+            (system gptel--system-message)
+            (timeout gptel-request-timeout))
+  "Request a response from `gptel-backend' for PROMPT synchronously.
+
+This function blocks until a response is received or TIMEOUT
+seconds have elapsed.
+
+PROMPT must be a string containing the prompt to send.  Unlike
+`gptel-request', this function does not support using buffer
+contents or regions as prompts.
+
+Returns the response string on success, or signals an error on
+failure or timeout.
+
+Keyword arguments:
+
+SYSTEM is the system message sent to the LLM.  This can be a
+string, a list of strings, or a function that returns either.
+If omitted, the value of `gptel--system-message' for the current
+buffer is used.  See `gptel-directives' for more information.
+
+TIMEOUT is the maximum time in seconds to wait for a response.
+It defaults to `gptel-request-timeout'.  If the timeout is
+reached, an error is signaled.
+
+Note: This function does not support streaming responses, tool
+use, or multi-turn conversations.  For those use cases, use
+`gptel-request' with a callback instead.
+
+Example:
+
+  (gptel-request-sync \"What is 2 + 2?\")
+  => \"2 + 2 equals 4.\"
+
+Example with custom system message:
+
+  (gptel-request-sync \"Translate to French: Hello\"
+    :system \"You are a translator. Respond with only the translation.\")"
+  (unless (stringp prompt)
+    (error "`gptel-request-sync' requires PROMPT to be a string"))
+  (let ((response nil)
+        (error-info nil)
+        (done nil)
+        (start-time (float-time))
+        (temp-buffer (generate-new-buffer " *gptel-sync*")))
+    (unwind-protect
+        (progn
+          (gptel-request prompt
+            :buffer temp-buffer
+            :stream nil
+            :system system
+            :callback (lambda (resp info)
+                        (cond
+                         ((stringp resp)
+                          (setq response resp))
+                         ((eq resp 'abort)
+                          (setq error-info "Request aborted"))
+                         ((and (consp resp) (eq (car resp) 'tool-call))
+                          (setq error-info "Tool calls are not supported in synchronous requests"))
+                         ((null resp)
+                          (setq error-info (or (plist-get info :status)
+                                               "Unknown error"))))
+                        (setq done t)))
+          ;; Block until done or timeout
+          (while (not done)
+            (when (> (- (float-time) start-time) timeout)
+              (gptel-abort temp-buffer)
+              (setq done t
+                    error-info (format "Request timed out after %d seconds" timeout)))
+            (accept-process-output nil 0.1)))
+      ;; Clean up temp buffer
+      (when (buffer-live-p temp-buffer)
+        (kill-buffer temp-buffer)))
+    (if error-info
+        (error "gptel-request-sync failed: %s" error-info)
+      response)))
+
+
 
 ;;; Prompt creation
 (defun gptel--create-prompt-buffer (&optional prompt-end)
