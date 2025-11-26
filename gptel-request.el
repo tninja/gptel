@@ -2964,9 +2964,14 @@ Example usage:
     (unwind-protect
         (progn
           ;; Copy buffer-local gptel settings to temp buffer
+          ;; Uses the same variables as `gptel--with-buffer-copy-internal'
           (with-current-buffer temp-buffer
-            (dolist (sym '(gptel-backend gptel-model gptel--system-message
-                           gptel-temperature gptel-max-tokens))
+            (dolist (sym '(gptel-backend gptel--system-message gptel-model
+                           gptel-mode gptel-track-response gptel-track-media
+                           gptel-use-tools gptel-tools gptel-use-curl gptel--schema
+                           gptel-use-context gptel-context gptel--num-messages-to-send
+                           gptel-stream gptel-include-reasoning gptel--request-params
+                           gptel-temperature gptel-max-tokens gptel-cache))
               (set (make-local-variable sym)
                    (buffer-local-value sym request-buffer))))
           (gptel-request prompt
@@ -2989,9 +2994,9 @@ Example usage:
             (when (> (- (float-time) start-time) timeout)
               (gptel-abort temp-buffer)
               (setq done t
-                    error-info (format "Request timed out after %d seconds" timeout)))
+                    error-info (format "Request timed out after %s seconds" timeout)))
             ;; Process events and allow interruption
-            (accept-process-output nil 0.1)))
+            (accept-process-output nil 0.05)))
       ;; Clean up temp buffer
       (when (buffer-live-p temp-buffer)
         (kill-buffer temp-buffer)))
