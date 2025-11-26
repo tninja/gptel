@@ -2890,5 +2890,114 @@ PROC-INFO is a plist with contextual information."
         (list nil http-status (concat "(" http-msg ") Could not parse HTTP response.")
               "Could not parse HTTP response.")))))
 
+
+;;; Synchronous request API
+
+(defcustom gptel-request-timeout 30
+  "Default timeout in seconds for synchronous gptel requests.
+
+This is the maximum time `gptel-request-sync' will wait for a
+response from the LLM before timing out."
+  :type 'natnum
+  :group 'gptel)
+
+;;;###autoload
+(cl-defun gptel-request-sync
+    (prompt &key
+            (buffer (current-buffer))
+            context
+            (system gptel--system-message)
+            (timeout gptel-request-timeout))
+  "Request a response from the `gptel-backend' for PROMPT synchronously.
+
+This function blocks until a response is received or TIMEOUT seconds
+have elapsed.  It is a simpler, synchronous alternative to `gptel-request'
+for use cases where blocking behavior is acceptable.
+
+Returns the response string if successful, or nil if an error occurred
+or the request timed out.
+
+PROMPT must be a string containing the text to send to the LLM.
+
+Keyword arguments:
+
+BUFFER is used as the context buffer for the request.  It defaults to
+the current buffer.
+
+CONTEXT is any additional data needed for processing.
+
+SYSTEM is the system message or directive sent to the LLM.
+See `gptel-directives' for more information.  If omitted, the value
+of `gptel--system-message' for BUFFER is used.
+
+TIMEOUT is the maximum time in seconds to wait for a response.
+It defaults to the value of `gptel-request-timeout'.
+
+Note:
+
+1. This function disables streaming since it waits for the complete
+   response.
+
+2. This function does not support multi-turn conversations or tool
+   calls.  For more advanced use cases, use `gptel-request' with
+   a callback instead.
+
+3. Consider let-binding `gptel-backend' and `gptel-model' around
+   calls to this function to specify the LLM to use.
+
+Example usage:
+
+  (gptel-request-sync \"What is the capital of France?\")
+
+  (let ((gptel-backend my-backend)
+        (gptel-model \\='gpt-4o-mini))
+    (gptel-request-sync \"Explain Emacs in one sentence.\"
+      :timeout 60))"
+  (unless (stringp prompt)
+    (user-error "`gptel-request-sync' requires a string PROMPT"))
+  (let ((response nil)
+        (error-info nil)
+        (done nil)
+        (start-time (float-time))
+        (request-buffer buffer)
+        (temp-buffer (generate-new-buffer " *gptel-sync*")))
+    (unwind-protect
+        (progn
+          ;; Copy buffer-local gptel settings to temp buffer
+          (with-current-buffer temp-buffer
+            (dolist (sym '(gptel-backend gptel-model gptel--system-message
+                           gptel-temperature gptel-max-tokens))
+              (set (make-local-variable sym)
+                   (buffer-local-value sym request-buffer))))
+          (gptel-request prompt
+            :buffer temp-buffer
+            :stream nil
+            :context context
+            :system system
+            :callback (lambda (resp info)
+                        (cond
+                         ((stringp resp)
+                          (setq response resp))
+                         ((eq resp 'abort)
+                          (setq error-info "Request aborted."))
+                         ((null resp)
+                          (setq error-info
+                                (or (plist-get info :status) "Unknown error"))))
+                        (setq done t)))
+          ;; Block until done or timeout
+          (while (not done)
+            (when (> (- (float-time) start-time) timeout)
+              (gptel-abort temp-buffer)
+              (setq done t
+                    error-info (format "Request timed out after %d seconds" timeout)))
+            ;; Process events and allow interruption
+            (accept-process-output nil 0.1)))
+      ;; Clean up temp buffer
+      (when (buffer-live-p temp-buffer)
+        (kill-buffer temp-buffer)))
+    (when error-info
+      (message "gptel-request-sync: %s" error-info))
+    response))
+
 (provide 'gptel-request)
 ;;; gptel-request.el ends here
