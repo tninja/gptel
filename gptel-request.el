@@ -2957,10 +2957,10 @@ Example usage:
     (user-error "`gptel-request-sync' requires a string PROMPT"))
   (let ((response nil)
         (error-info nil)
-        (done nil)
         (start-time (float-time))
         (request-buffer buffer)
-        (temp-buffer (generate-new-buffer " *gptel-sync*")))
+        (temp-buffer (generate-new-buffer " *gptel-sync*"))
+        (fsm nil))
     (unwind-protect
         (progn
           ;; Copy buffer-local gptel settings to temp buffer
@@ -2973,30 +2973,45 @@ Example usage:
                            gptel-stream gptel-include-reasoning gptel--request-params
                            gptel-temperature gptel-max-tokens gptel-cache))
               (set (make-local-variable sym)
-                   (buffer-local-value sym request-buffer))))
-          (gptel-request prompt
-            :buffer temp-buffer
-            :stream nil
-            :context context
-            :system system
-            :callback (lambda (resp info)
-                        (cond
-                         ((stringp resp)
-                          (setq response resp))
-                         ((eq resp 'abort)
-                          (setq error-info "Request aborted."))
-                         ((null resp)
-                          (setq error-info
-                                (or (plist-get info :status) "Unknown error"))))
-                        (setq done t)))
-          ;; Block until done or timeout
-          (while (not done)
+                   (buffer-local-value sym request-buffer)))
+            ;; Disable tool use for sync calls - tool calls require user interaction
+            (setq-local gptel-use-tools nil)
+            (setq-local gptel-tools nil))
+          (setq fsm
+                (gptel-request prompt
+                  :buffer temp-buffer
+                  :stream nil
+                  :context context
+                  :system system
+                  :callback (lambda (resp info)
+                              (cond
+                               ;; Only capture the final string response
+                               ((stringp resp)
+                                (setq response resp))
+                               ;; Handle abort signal
+                               ((eq resp 'abort)
+                                (setq error-info "Request aborted."))
+                               ;; Handle errors (null response with error info)
+                               ((and (null resp) (plist-get info :error))
+                                (let ((err (plist-get info :error)))
+                                  (setq error-info
+                                        (cond
+                                         ((stringp err) err)
+                                         ((plist-get err :message)
+                                          (plist-get err :message))
+                                         (t (or (plist-get info :status)
+                                                "Unknown error"))))))))))
+          ;; Block until FSM reaches terminal state (DONE or ERRS) or timeout
+          (while (not (memq (gptel-fsm-state fsm) '(DONE ERRS ABRT)))
             (when (> (- (float-time) start-time) timeout)
               (gptel-abort temp-buffer)
-              (setq done t
-                    error-info (format "Request timed out after %s seconds" timeout)))
-            ;; Process events and allow interruption
-            (accept-process-output nil 0.05)))
+              (setq error-info (format "Request timed out after %s seconds" timeout))
+              ;; Force exit from loop after abort - cl-defun creates implicit cl-block
+              (cl-return-from gptel-request-sync nil))
+            ;; Process pending I/O and timers
+            (accept-process-output nil 0.1)
+            ;; Also process any pending input events
+            (sit-for 0.01 t)))
       ;; Clean up temp buffer
       (when (buffer-live-p temp-buffer)
         (kill-buffer temp-buffer)))
